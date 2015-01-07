@@ -377,6 +377,13 @@ sessions.add_argument(
     """
 )
 
+sessions.add_argument(
+    '--browser-cookie',
+    dest='browser_cookie',
+    metavar='BROWSER_COOKIE',
+    help=""
+)
+
 
 #######################################################################
 # Authentication

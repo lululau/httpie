@@ -18,7 +18,7 @@ DEFAULT_UA = 'HTTPie/%s' % __version__
 def get_response(args, config_dir):
     """Send the request and return a `request.Response`."""
 
-    if not args.session and not args.session_read_only:
+    if not args.session and not args.session_read_only and not args.browser_cookie:
         requests_kwargs = get_requests_kwargs(args)
         if args.debug:
             dump_request(requests_kwargs)

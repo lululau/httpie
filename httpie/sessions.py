@@ -10,6 +10,7 @@ from requests.cookies import RequestsCookieJar, create_cookie
 from httpie.compat import urlsplit
 from httpie.config import BaseConfigDict, DEFAULT_CONFIG_DIR
 from httpie.plugins import plugin_manager
+from httpie.browser_cookie import BrowserCookie
 
 
 SESSIONS_DIR_NAME = 'sessions'
@@ -27,22 +28,27 @@ def get_response(session_name, config_dir, args, read_only=False):
 
     """
     from .client import get_requests_kwargs, dump_request
-    if os.path.sep in session_name:
-        path = os.path.expanduser(session_name)
+    
+    if args.browser_cookie:
+        browser_cookie = BrowserCookie(args.browser_cookie)
+        session = browser_cookie.get_session(args.url)
+        read_only = True
     else:
-        hostname = (args.headers.get('Host', None)
-                    or urlsplit(args.url).netloc.split('@')[-1])
-        assert re.match('^[a-zA-Z0-9_.:-]+$', hostname)
+        if os.path.sep in session_name:
+            path = os.path.expanduser(session_name)
+        else:
+            hostname = (args.headers.get('Host', None)
+                        or urlsplit(args.url).netloc.split('@')[-1])
+            assert re.match('^[a-zA-Z0-9_.:-]+$', hostname)
 
-        # host:port => host_port
-        hostname = hostname.replace(':', '_')
-        path = os.path.join(config_dir,
-                            SESSIONS_DIR_NAME,
-                            hostname,
-                            session_name + '.json')
-
-    session = Session(path)
-    session.load()
+            # host:port => host_port
+            hostname = hostname.replace(':', '_')
+            path = os.path.join(config_dir,
+                                SESSIONS_DIR_NAME,
+                                hostname,
+                                session_name + '.json')
+        session = Session(path)
+        session.load()
 
     requests_kwargs = get_requests_kwargs(args, base_headers=session.headers)
     if args.debug:
@@ -67,9 +73,10 @@ def get_response(session_name, config_dir, args, read_only=False):
         raise
     else:
         # Existing sessions with `read_only=True` don't get updated.
-        if session.is_new() or not read_only:
-            session.cookies = requests_session.cookies
-            session.save()
+        if not args.browser_cookie:
+            if session.is_new() or not read_only:
+                session.cookies = requests_session.cookies
+                session.save()
         return response
 
 
