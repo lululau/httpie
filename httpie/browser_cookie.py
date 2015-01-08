@@ -21,6 +21,28 @@ class BrowserCookie(object):
 
     def load_chrome_cookies(self, browser_name):
 
+        if re.match(".*:", browser_name):
+            _, prof_num = browser_name.split(":")
+            profile = "Profile " + prof_num
+        else:
+            profile = "Default"
+        cookie_filename = os.path.expanduser("~/Library/Application Support/Google/Chrome/%s/Cookies" % profile)
+        tmpf = tempfile.NamedTemporaryFile()
+        shutil.copy2(cookie_filename, tmpf.name)
+        cookie_filename = tmpf.name
+        db = sqlite3.connect(cookie_filename)
+        cur = db.cursor()
+        cur.execute('select host_key, path, name, value, encrypted_value, expires_utc, secure from Cookies')
+        while True:
+            row = cur.fetchone()
+            if not row:
+                break
+            self.cookies.append({"domain": row[0], "path": row[1], "name": row[2], "value": row[3], "encrypted_value": row[4], "expires": row[5], "secure": row[6] == 1})
+        db.close()
+
+    def get_session(self, url):
+        cookies = {}
+
         passwd = keyring.get_password('Chrome Safe Storage', 'Chrome').encode('utf-8')
 
         def decrypt_value(ev):
@@ -38,30 +60,6 @@ class BrowserCookie(object):
                 return v
             else:
                 return decrypt_value(ev)
-
-        if re.match(".*:", browser_name):
-            _, prof_num = browser_name.split(":")
-            profile = "Profile " + prof_num
-        else:
-            profile = "Default"
-        cookie_filename = os.path.expanduser("~/Library/Application Support/Google/Chrome/%s/Cookies" % profile)
-        tmpf = tempfile.NamedTemporaryFile()
-        shutil.copy2(cookie_filename, tmpf.name)
-        cookie_filename = tmpf.name
-        db = sqlite3.connect(cookie_filename)
-        cur = db.cursor()
-        cur.execute('select host_key, path, name, value, encrypted_value, expires_utc, secure from Cookies')
-        while True:
-            row = cur.fetchone()
-            if not row:
-                break
-            value = get_value(row[3], row[4])
-            expires = row[5]/1000000 - 11644473600
-            self.cookies.append({"domain": row[0], "path": row[1], "name": row[2], "value": value, "expires": expires, "secure": row[6] == 1})
-        db.close()
-
-    def get_session(self, url):
-        cookies = {}
        
         parse_res = urlparse(url)
         hostname = parse_res.netloc.split(":")[0]
@@ -71,18 +69,18 @@ class BrowserCookie(object):
                 if c['domain'].startswith("."):
                     if hostname.endswith(c['domain']):
                         cookies[c['name']] = {
-                            "expires": c['expires'],
+                            "expires": c['expires']/1000000-11644473600,
                             "path": c['path'],
                             "secure": c['secure'],
-                            "value": c['value']
+                            "value": get_value(c['value'], c['encrypted_value'])
                         }
                 else:
                     if c['domain'] == hostname:
                         cookies[c['name']] = {
-                            "expires": c['expires'],
+                            "expires": c['expires']/1000000-11644473600,
                             "path": c['path'],
                             "secure": c['secure'],
-                            "value": c['value']
+                            "value": get_value(c['value'], c['encrypted_value'])
                         }
 
         session = httpie.sessions.Session(None)
